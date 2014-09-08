@@ -19,7 +19,7 @@ namespace DataOrm.DataAccess.Communication.Implementations
     public class SqlServer : ServerBase, IAsyncDataAccess
     {
         private const int MaxBatchSIze = 0x10000;
-        private static readonly ILogger Logger;
+        //private static readonly ILogger Logger;
         private readonly SqlConnection _connection;
         private string _connectionString;
 
@@ -88,9 +88,10 @@ namespace DataOrm.DataAccess.Communication.Implementations
                     throw new NullReferenceException("IDbCommand is null. Now work will be done.");
                 asyncResult.InternalAsyncResult = asyncResult.ExecuteReader.BeginInvoke(asyncResult.Command, asyncResult.Behaviour, ExecuteReaderCallback<T>, asyncResult);
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
                 //Logger.LogError(e);
+                Console.WriteLine(ex);
                 asyncResult.SetCompleted();
             }
             return asyncResult;
@@ -287,9 +288,10 @@ namespace DataOrm.DataAccess.Communication.Implementations
                     }
                 }
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
                 //Logger.LogError(e);
+                Console.WriteLine(ex);
                 throw;
             }
         }
@@ -307,9 +309,10 @@ namespace DataOrm.DataAccess.Communication.Implementations
                 var result = propertyInfo != null ? propertyInfo.GetValue(x, null) ?? "" : "";
                 return result ?? "";
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
                 //Logger.LogError(e);
+                Console.WriteLine(ex);
                 return "";
             }
         }
@@ -367,9 +370,10 @@ namespace DataOrm.DataAccess.Communication.Implementations
                     stateObject.InternalAsyncResult = stateObject.ExecuteReader.BeginInvoke(stateObject.Command, stateObject.Behaviour, ExecuteReaderCallback<T>, stateObject);
                 }
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
                 //Logger.LogError(e);
+                Console.WriteLine(ex);
                 throw;
             }
         }
@@ -395,9 +399,10 @@ namespace DataOrm.DataAccess.Communication.Implementations
                 }
                 info.SetValue(instance, o, null);
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
                 //Logger.LogError(e);
+                Console.WriteLine(ex);
                 throw;
             }
         }
@@ -499,6 +504,7 @@ namespace DataOrm.DataAccess.Communication.Implementations
                         catch (Exception ex)
                         {
                             //Logger.LogError(ex);
+                            Console.WriteLine(ex);
                             transaction.Rollback();
                             return false;
                         }
@@ -525,6 +531,7 @@ namespace DataOrm.DataAccess.Communication.Implementations
                     catch (Exception ex)
                     {
                         //Logger.LogError(ex);
+                        Console.WriteLine(ex);
                         transaction.Rollback();
                         return false;
                     }
@@ -600,6 +607,7 @@ namespace DataOrm.DataAccess.Communication.Implementations
                         catch (Exception ex)
                         {
                             //Logger.LogError(ex);
+                            Console.WriteLine(ex);
                             transaction.Rollback();
                             return false;
                         }
@@ -626,6 +634,7 @@ namespace DataOrm.DataAccess.Communication.Implementations
                     catch (Exception ex)
                     {
                         //Logger.LogError(ex);
+                        Console.WriteLine(ex);
                         transaction.Rollback();
                         return false;
                     }
@@ -695,9 +704,9 @@ namespace DataOrm.DataAccess.Communication.Implementations
             catch (Exception ex)
             {
                 //Logger.LogError(ex);
+                Console.WriteLine(ex);
                 throw;
             }
-            return null;
         }
 
         private List<string> ValidateDataColumns(IDbCommand command, LoadWithOption option)
@@ -723,9 +732,9 @@ namespace DataOrm.DataAccess.Communication.Implementations
             catch (Exception ex)
             {
                 //Logger.LogError(ex);
+                Console.WriteLine(ex);
                 throw;
             }
-            return null;
         }
 
         /// <summary>
@@ -789,6 +798,7 @@ namespace DataOrm.DataAccess.Communication.Implementations
             catch (Exception ex)
             {
                 //Logger.LogError(ex);
+                Console.WriteLine(ex);
                 throw;
             }
 

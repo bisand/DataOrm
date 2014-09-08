@@ -67,6 +67,7 @@ namespace DataOrm.DataAccess.Communication
             catch (Exception ex)
             {
                 //_logger.LogError(ex);
+                Console.WriteLine(ex);
             }
 
             return result;
@@ -99,6 +100,7 @@ namespace DataOrm.DataAccess.Communication
             catch (Exception ex)
             {
                 //_logger.LogError(ex);
+                Console.WriteLine(ex);
             }
 
             return result;
@@ -181,6 +183,7 @@ namespace DataOrm.DataAccess.Communication
             catch (Exception ex)
             {
                 //_logger.LogError(ex);
+                Console.WriteLine(ex);
             }
         }
 
