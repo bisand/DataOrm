@@ -190,31 +190,31 @@ namespace DataOrm.DataAccess.Communication
             {
                 value = GetValueAsString(value);
             }
-            else if (propertyInfo.PropertyType == typeof(int))
+            else if (propertyInfo.PropertyType == typeof (int))
             {
                 value = GetValueAsInt(value);
             }
-            else if (propertyInfo.PropertyType == typeof(short))
+            else if (propertyInfo.PropertyType == typeof (short))
             {
                 value = GetValueAsShort(value);
             }
-            else if (propertyInfo.PropertyType == typeof(long))
+            else if (propertyInfo.PropertyType == typeof (long))
             {
                 value = GetValueAsLong(value);
             }
-            else if (propertyInfo.PropertyType == typeof(byte))
+            else if (propertyInfo.PropertyType == typeof (byte))
             {
                 value = GetValueAsByte(value);
             }
-            else if (propertyInfo.PropertyType == typeof(double))
+            else if (propertyInfo.PropertyType == typeof (double))
             {
                 value = GetValueAsDouble(value);
             }
-            else if (propertyInfo.PropertyType == typeof(float))
+            else if (propertyInfo.PropertyType == typeof (float))
             {
                 value = GetValueAsFloat(value);
             }
-            else if (propertyInfo.PropertyType == typeof(decimal))
+            else if (propertyInfo.PropertyType == typeof (decimal))
             {
                 value = GetValueAsDecimal(value);
             }
@@ -319,27 +319,27 @@ namespace DataOrm.DataAccess.Communication
                 return ((value is bool && (bool) value)) ? "1" : "0";
             }
 
-            if (GetPropertyType(pi) == typeof(int))
+            if (GetPropertyType(pi) == typeof (int))
             {
-                return ((value is int ? (int)value : 0)).ToString(CultureInfo.InvariantCulture);
+                return ((value is int ? (int) value : 0)).ToString(CultureInfo.InvariantCulture);
             }
 
-            if (GetPropertyType(pi) == typeof(short))
+            if (GetPropertyType(pi) == typeof (short))
             {
-                return ((value is short ? (short)value : 0)).ToString(CultureInfo.InvariantCulture);
+                return ((value is short ? (short) value : 0)).ToString(CultureInfo.InvariantCulture);
             }
 
-            if (GetPropertyType(pi) == typeof(long))
+            if (GetPropertyType(pi) == typeof (long))
             {
-                return ((value is long ? (long)value : 0)).ToString(CultureInfo.InvariantCulture);
+                return ((value is long ? (long) value : 0)).ToString(CultureInfo.InvariantCulture);
             }
 
-            if (GetPropertyType(pi) == typeof(byte))
+            if (GetPropertyType(pi) == typeof (byte))
             {
-                return ((value is byte ? (byte)value : 0)).ToString(CultureInfo.InvariantCulture);
+                return ((value is byte ? (byte) value : 0)).ToString(CultureInfo.InvariantCulture);
             }
 
-            if (GetPropertyType(pi) == typeof(decimal))
+            if (GetPropertyType(pi) == typeof (decimal))
             {
                 return ((value is decimal ? (decimal) value : 0)).ToString(CultureInfo.InvariantCulture);
             }

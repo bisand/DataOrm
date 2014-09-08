@@ -502,12 +502,12 @@ namespace DataOrm.DataAccess.Communication.Implementations
                     FieldDefinition fd;
                     if (string.IsNullOrWhiteSpace(tmpVal = GetFieldValue(data, pi.Value)) || (fd = columns.FirstOrDefault(x => String.Equals(x.ColumnName, pi.Value.Name, StringComparison.CurrentCultureIgnoreCase))) == null)
                         continue;
-                    if(fd.IsAutoIncrement)
+                    if (fd.IsAutoIncrement)
                         continue;
                     fields += pi.Value.Name + ",";
                     if (fd.DataType == typeof (string) && tmpVal.Length > fd.ColumnSize)
                         values += tmpVal.Substring(0, fd.ColumnSize - 1) + "',";
-                    else if (fd.DataType == typeof(decimal) || fd.DataType == typeof(float) || fd.DataType == typeof(double))
+                    else if (fd.DataType == typeof (decimal) || fd.DataType == typeof (float) || fd.DataType == typeof (double))
                         values += tmpVal.Replace(",", ".") + ",";
                     else
                         values += tmpVal + ",";
@@ -602,7 +602,7 @@ namespace DataOrm.DataAccess.Communication.Implementations
                             setters += pi.Value.Name + "=";
                             if (fd.DataType == typeof (string) && tmpVal.Length > fd.ColumnSize)
                                 setters += tmpVal.Substring(0, fd.ColumnSize - 1) + "',";
-                            else if (fd.DataType == typeof(decimal) || fd.DataType == typeof(float) || fd.DataType == typeof(double))
+                            else if (fd.DataType == typeof (decimal) || fd.DataType == typeof (float) || fd.DataType == typeof (double))
                                 setters += tmpVal.Replace(",", ".") + ",";
                             else
                                 setters += tmpVal + ",";
