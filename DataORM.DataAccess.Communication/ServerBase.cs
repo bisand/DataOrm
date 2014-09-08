@@ -190,9 +190,21 @@ namespace DataOrm.DataAccess.Communication
             {
                 value = GetValueAsString(value);
             }
-            else if (propertyInfo.PropertyType == typeof (int))
+            else if (propertyInfo.PropertyType == typeof(int))
             {
                 value = GetValueAsInt(value);
+            }
+            else if (propertyInfo.PropertyType == typeof(short))
+            {
+                value = GetValueAsShort(value);
+            }
+            else if (propertyInfo.PropertyType == typeof(long))
+            {
+                value = GetValueAsLong(value);
+            }
+            else if (propertyInfo.PropertyType == typeof(byte))
+            {
+                value = GetValueAsByte(value);
             }
             else if (propertyInfo.PropertyType == typeof(double))
             {
@@ -221,6 +233,24 @@ namespace DataOrm.DataAccess.Communication
         {
             value = value == null ? "0" : value.ToString();
             return int.Parse(value.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture);
+        }
+
+        private static short GetValueAsShort(object value)
+        {
+            value = value == null ? "0" : value.ToString();
+            return short.Parse(value.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture);
+        }
+
+        private static long GetValueAsLong(object value)
+        {
+            value = value == null ? "0" : value.ToString();
+            return long.Parse(value.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture);
+        }
+
+        private static byte GetValueAsByte(object value)
+        {
+            value = value == null ? "0" : value.ToString();
+            return byte.Parse(value.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture);
         }
 
         private static double GetValueAsDouble(object value)
@@ -289,12 +319,27 @@ namespace DataOrm.DataAccess.Communication
                 return ((value is bool && (bool) value)) ? "1" : "0";
             }
 
-            if (GetPropertyType(pi) == typeof (int))
+            if (GetPropertyType(pi) == typeof(int))
             {
-                return ((value is int ? (int) value : 0)).ToString(CultureInfo.InvariantCulture);
+                return ((value is int ? (int)value : 0)).ToString(CultureInfo.InvariantCulture);
             }
 
-            if (GetPropertyType(pi) == typeof (decimal))
+            if (GetPropertyType(pi) == typeof(short))
+            {
+                return ((value is short ? (short)value : 0)).ToString(CultureInfo.InvariantCulture);
+            }
+
+            if (GetPropertyType(pi) == typeof(long))
+            {
+                return ((value is long ? (long)value : 0)).ToString(CultureInfo.InvariantCulture);
+            }
+
+            if (GetPropertyType(pi) == typeof(byte))
+            {
+                return ((value is byte ? (byte)value : 0)).ToString(CultureInfo.InvariantCulture);
+            }
+
+            if (GetPropertyType(pi) == typeof(decimal))
             {
                 return ((value is decimal ? (decimal) value : 0)).ToString(CultureInfo.InvariantCulture);
             }
