@@ -14,7 +14,7 @@ using DataOrm.DataAccess.Common.Models;
 using DataOrm.DataAccess.Common.Threading;
 using Microsoft.Build.Framework;
 
-namespace DataOrm.DataAccess.Communication
+namespace DataOrm.DataAccess.Communication.Implementations
 {
     public class SqlServer : ServerBase, IAsyncDataAccess
     {

@@ -1,5 +1,6 @@
 ﻿using System;
 using DataOrm.DataAccess.Communication;
+using DataOrm.DataAccess.Communication.Implementations;
 using DataOrm.Tests.Integration.Models;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 

@@ -48,7 +48,7 @@
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="ServerBase.cs" />
-    <Compile Include="SqlServer.cs" />
+    <Compile Include="Implementations\SqlServer.cs" />
     <Compile Include="Threading\DataAsyncResult.cs" />
   </ItemGroup>
   <ItemGroup>
