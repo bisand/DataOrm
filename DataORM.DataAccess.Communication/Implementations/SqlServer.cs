@@ -65,47 +65,6 @@ namespace DataOrm.DataAccess.Communication.Implementations
         /// <summary>
         /// </summary>
         /// <typeparam name="T"></typeparam>
-        /// <param name="expression"></param>
-        public void LoadWith<T>(Expression<Func<T, Object>> expression)
-        {
-            var option = new LoadWithOption();
-            var member = (MemberExpression) expression.Body;
-            option.SourceType = typeof (T);
-            option.PropertyName = member.Member.Name;
-            option.PropertyType = member.Type;
-            option.DeclaringType = member.Member.DeclaringType;
-            var attribute = member.Member.GetCustomAttributes(typeof (NavigationPropertyAttribute), false).FirstOrDefault() as NavigationPropertyAttribute;
-            if (attribute == null)
-                throw new ApplicationException("The LoadWith property must be decorated with the NavigationPropertyAttribute.");
-
-            // Singularize names. They will be pluralized later when querying the database.
-            if (option.PropertyType.IsGenericType && option.PropertyType.GetGenericTypeDefinition() == typeof (List<>))
-            {
-                option.EntityName = string.IsNullOrWhiteSpace(attribute.Entity) ? Singularize(option.PropertyName) : attribute.Entity;
-                option.ForeignKey = string.IsNullOrWhiteSpace(attribute.ForeignKey) ? Singularize(option.PropertyName) + "No" : attribute.ForeignKey;
-            }
-            else
-            {
-                option.EntityName = string.IsNullOrWhiteSpace(attribute.Entity) ? option.PropertyName : attribute.Entity;
-                option.ForeignKey = string.IsNullOrWhiteSpace(attribute.ForeignKey) ? option.PropertyName + "No" : attribute.ForeignKey;
-            }
-            option.LocalKey = string.IsNullOrWhiteSpace(attribute.LocalKey) ? option.ForeignKey : attribute.LocalKey;
-            LoadWithOptions.Add(option, null);
-        }
-
-        /// <summary>
-        /// </summary>
-        /// <param name="name"></param>
-        /// <param name="value"></param>
-        /// <param name="dbType"></param>
-        public void AddParameter(string name, object value, DbType dbType)
-        {
-            Parameters.Add(new SqlParameter(name, value));
-        }
-
-        /// <summary>
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
         /// <param name="query"></param>
         /// <param name="callback"></param>
         /// <param name="state"></param>
@@ -161,30 +120,42 @@ namespace DataOrm.DataAccess.Communication.Implementations
         /// <summary>
         /// </summary>
         /// <typeparam name="T"></typeparam>
-        /// <param name="ar"></param>
-        [Obsolete("The command object is now fetched synchronously. This method will be deleted in a later release.")]
-        private void CreateCommandCallback<T>(IAsyncResult ar) where T : new()
+        /// <param name="expression"></param>
+        public void LoadWith<T>(Expression<Func<T, Object>> expression)
         {
-            if (ar == null || !(ar.AsyncState is SqlAsyncResult<T>))
-                return;
+            var option = new LoadWithOption();
+            var member = (MemberExpression)expression.Body;
+            option.SourceType = typeof(T);
+            option.PropertyName = member.Member.Name;
+            option.PropertyType = member.Type;
+            option.DeclaringType = member.Member.DeclaringType;
+            var attribute = member.Member.GetCustomAttributes(typeof(NavigationPropertyAttribute), false).FirstOrDefault() as NavigationPropertyAttribute;
+            if (attribute == null)
+                throw new ApplicationException("The LoadWith property must be decorated with the NavigationPropertyAttribute.");
 
-            var asyncResult = (ar.AsyncState as SqlAsyncResult<T>);
-            try
+            // Singularize names. They will be pluralized later when querying the database.
+            if (option.PropertyType.IsGenericType && option.PropertyType.GetGenericTypeDefinition() == typeof(List<>))
             {
-                asyncResult.Command = asyncResult.CreateCommand.EndInvoke(asyncResult.InternalAsyncResult);
-                if (asyncResult.Command == null)
-                    throw new NullReferenceException("IDbCommand is null. Now work will be done.");
+                option.EntityName = string.IsNullOrWhiteSpace(attribute.Entity) ? Singularize(option.PropertyName) : attribute.Entity;
+                option.ForeignKey = string.IsNullOrWhiteSpace(attribute.ForeignKey) ? Singularize(option.PropertyName) + "No" : attribute.ForeignKey;
+            }
+            else
+            {
+                option.EntityName = string.IsNullOrWhiteSpace(attribute.Entity) ? option.PropertyName : attribute.Entity;
+                option.ForeignKey = string.IsNullOrWhiteSpace(attribute.ForeignKey) ? option.PropertyName + "No" : attribute.ForeignKey;
+            }
+            option.LocalKey = string.IsNullOrWhiteSpace(attribute.LocalKey) ? option.ForeignKey : attribute.LocalKey;
+            LoadWithOptions.Add(option, null);
+        }
 
-                asyncResult.InternalAsyncResult = asyncResult.ExecuteReader.BeginInvoke(asyncResult.Command, asyncResult.Behaviour, ExecuteReaderCallback<T>, asyncResult);
-            }
-            catch (Exception ex)
-            {
-                //Logger.LogError(ex);
-                asyncResult.Exception = ex;
-                asyncResult.SetCompleted();
-                if (asyncResult.MainAsyncResult != null)
-                    asyncResult.MainAsyncResult.SetCompleted();
-            }
+        /// <summary>
+        /// </summary>
+        /// <param name="name"></param>
+        /// <param name="value"></param>
+        /// <param name="dbType"></param>
+        public void AddParameter(string name, object value, DbType dbType)
+        {
+            Parameters.Add(new SqlParameter(name, value));
         }
 
         /// <summary>
