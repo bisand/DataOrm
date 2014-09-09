@@ -3,28 +3,31 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
+using System.Data.SqlClient;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using DataOrm.DataAccess.Common.Attributes;
+using DataOrm.DataAccess.Common.Interfaces;
 using DataOrm.DataAccess.Common.Models;
 using DataOrm.DataAccess.Common.Threading;
+using DataOrm.DataAccess.Communication.Implementations;
 
 namespace DataOrm.DataAccess.Communication
 {
-    public abstract class ServerBase
+    public abstract class DataOrmServer : IDisposable
     {
         protected static readonly ConcurrentDictionary<string, Dictionary<string, PropertyInfo>> ReflectedProperties;
         protected static readonly ConcurrentDictionary<string, List<FieldDefinition>> TableColumns;
         protected readonly Dictionary<LoadWithOption, List<object>> LoadWithOptions;
 
-        static ServerBase()
+        static DataOrmServer()
         {
             ReflectedProperties = new ConcurrentDictionary<string, Dictionary<string, PropertyInfo>>();
             TableColumns = new ConcurrentDictionary<string, List<FieldDefinition>>();
         }
 
-        protected ServerBase()
+        protected DataOrmServer()
         {
             DateTimeFormats = new[] {"yyyyMMdd", "yyyy-MM-dd", "dd.MM.yyyy", "yyyyMMddHHmmss", "yyyy-MM-dd HH:mm:ss", "dd.MM.yyyy HH:mm:ss"};
             Parameters = new List<DbParameter>();
@@ -37,6 +40,28 @@ namespace DataOrm.DataAccess.Communication
         public string[] DateTimeFormats { get; set; }
 
         public List<DbParameter> Parameters { get; set; }
+
+        public static IDataAccess CreateSession(SessionType sessionType, string connectionString)
+        {
+            switch (sessionType)
+            {
+                case SessionType.SqlServer:
+                    var sqlServer = new SqlServer(connectionString);
+                    return sqlServer;
+            }
+            throw new NotImplementedException(string.Format("The session type is not implemented {0}", sessionType));
+        }
+
+        public static IDataAccess CreateSession(SessionType sessionType, IDbConnection connection)
+        {
+            switch (sessionType)
+            {
+                case SessionType.SqlServer:
+                    var sqlServer = new SqlServer(connection as SqlConnection);
+                    return sqlServer;
+            }
+            throw new NotImplementedException(string.Format("The session type is not implemented {0}", sessionType));
+        }
 
         protected List<T> ReadData<T>(IDataReader reader) where T : new()
         {
@@ -181,8 +206,9 @@ namespace DataOrm.DataAccess.Communication
                     SetPropertyValue(pi, obj, value is DBNull ? null : value);
                 else
                 {
-                    var propertyValue = TryGetValue(value, pi.PropertyType);
-                    SetPropertyValue(pi, obj, propertyValue);
+                    var propertyValue = TryGetPropertyValue(value, pi.PropertyType);
+                    if (propertyValue != null)
+                        SetPropertyValue(pi, obj, propertyValue);
                 }
             }
             catch (Exception ex)
@@ -194,135 +220,10 @@ namespace DataOrm.DataAccess.Communication
 
         private void SetPropertyValue(PropertyInfo propertyInfo, object obj, object value)
         {
-            if (propertyInfo.PropertyType == typeof (string))
-            {
-                value = GetValueAsString(value);
-            }
-            else if (propertyInfo.PropertyType == typeof (int))
-            {
-                value = GetValueAsInt(value);
-            }
-            else if (propertyInfo.PropertyType == typeof (short))
-            {
-                value = GetValueAsShort(value);
-            }
-            else if (propertyInfo.PropertyType == typeof (long))
-            {
-                value = GetValueAsLong(value);
-            }
-            else if (propertyInfo.PropertyType == typeof (byte))
-            {
-                value = GetValueAsByte(value);
-            }
-            else if (propertyInfo.PropertyType == typeof (double))
-            {
-                value = GetValueAsDouble(value);
-            }
-            else if (propertyInfo.PropertyType == typeof (float))
-            {
-                value = GetValueAsFloat(value);
-            }
-            else if (propertyInfo.PropertyType == typeof (decimal))
-            {
-                value = GetValueAsDecimal(value);
-            }
-            else if (propertyInfo.PropertyType == typeof (bool))
-            {
-                value = GetValueAsBoolean(value);
-            }
-            else if (propertyInfo.PropertyType == typeof(DateTime))
-            {
-                value = GetValueAsDateTime(value);
-            }
-            else if (propertyInfo.PropertyType == typeof(Guid))
-            {
-                value = GetValueAsGuid(value);
-            }
             propertyInfo.SetValue(obj, value, null);
         }
 
-        private static int GetValueAsInt(object value)
-        {
-            value = value == null ? "0" : value.ToString();
-            return int.Parse(value.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture);
-        }
-
-        private static short GetValueAsShort(object value)
-        {
-            value = value == null ? "0" : value.ToString();
-            return short.Parse(value.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture);
-        }
-
-        private static long GetValueAsLong(object value)
-        {
-            value = value == null ? "0" : value.ToString();
-            return long.Parse(value.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture);
-        }
-
-        private static byte GetValueAsByte(object value)
-        {
-            value = value == null ? "0" : value.ToString();
-            return byte.Parse(value.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture);
-        }
-
-        private static double GetValueAsDouble(object value)
-        {
-            value = value == null ? "0" : value.ToString().Replace(",", ".");
-            return double.Parse(value.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture);
-        }
-
-        private static double GetValueAsFloat(object value)
-        {
-            value = value == null ? "0" : value.ToString().Replace(",", ".");
-            return float.Parse(value.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture);
-        }
-
-        private static decimal GetValueAsDecimal(object value)
-        {
-            value = value == null ? "0" : value.ToString().Replace(",", ".");
-            return decimal.Parse(value.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture);
-        }
-
-        private static bool GetValueAsBoolean(object value)
-        {
-            var stringValue = value == null ? "0" : value.ToString();
-            switch (stringValue.ToLower())
-            {
-                case "0":
-                case "false":
-                    return false;
-                case "1":
-                case "true":
-                    return true;
-                default:
-                    return bool.Parse(stringValue);
-            }
-        }
-
-        private static string GetValueAsString(object value)
-        {
-            return value == null ? null : value.ToString();
-        }
-
-        private DateTime? GetValueAsDateTime(object value)
-        {
-            DateTime tmpDate;
-            if (!DateTime.TryParseExact((value ?? "").ToString(), DateTimeFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out tmpDate))
-                return null;
-
-            return tmpDate;
-        }
-
-        private Guid? GetValueAsGuid(object value)
-        {
-            Guid tmpDate;
-            if (!Guid.TryParse((value ?? "").ToString(), out tmpDate))
-                return null;
-
-            return tmpDate;
-        }
-
-        private static object TryGetValue(object value, Type outputType)
+        private static object TryGetPropertyValue(object value, Type outputType)
         {
             try
             {
@@ -330,6 +231,8 @@ namespace DataOrm.DataAccess.Communication
                     return null;
                 if (outputType == typeof (string))
                     return value.ToString();
+                if (outputType == typeof (Guid))
+                    return Guid.Parse(value.ToString());
 
                 var result = Convert.ChangeType(value, outputType);
                 return result;
@@ -465,5 +368,7 @@ namespace DataOrm.DataAccess.Communication
                 return name.Substring(0, name.Length - 3) + "x";
             return name = name.Substring(0, name.Length - 1);
         }
+
+        public abstract void Dispose();
     }
 }

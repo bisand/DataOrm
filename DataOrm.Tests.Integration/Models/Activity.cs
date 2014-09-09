@@ -17,6 +17,6 @@ namespace DataOrm.Tests.Integration.Models
         public DateTime CreatedDate { get; set; }
         public DateTime ModifiedDate { get; set; }
         public string SubComponent { get; set; }
-        public string LinkedId { get; set; }
+        public Guid LinkedId { get; set; }
     }
 }

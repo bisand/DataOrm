@@ -7,7 +7,7 @@ using DataOrm.DataAccess.Common.Threading;
 
 namespace DataOrm.DataAccess.Common.Interfaces
 {
-    public interface IDataAccess
+    public interface IDataAccess : IDisposable
     {
         string ConnectionString { get; set; }
         int? ConnectionTimeout { get; set; }

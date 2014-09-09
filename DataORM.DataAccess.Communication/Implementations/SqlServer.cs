@@ -16,12 +16,13 @@ using Microsoft.Build.Framework;
 
 namespace DataOrm.DataAccess.Communication.Implementations
 {
-    public class SqlServer : ServerBase, IAsyncDataAccess
+    public class SqlServer : DataOrmServer, IAsyncDataAccess
     {
         private const int MaxBatchSIze = 0x10000;
         //private static readonly ILogger Logger;
         private readonly SqlConnection _connection;
         private string _connectionString;
+        private bool _disposed;
 
         #region IAsyncDataAccess Members
 
@@ -32,11 +33,19 @@ namespace DataOrm.DataAccess.Communication.Implementations
         public SqlServer(string connectionString) : this()
         {
             _connectionString = connectionString;
+            _connection = new SqlConnection(connectionString);
+            _connection.Open();
         }
 
         public SqlServer(SqlConnection connection) : this()
         {
             _connection = connection;
+            if (_connection == null || _connection.GetType() != typeof(SqlConnection))
+            {
+                throw new ArgumentException("The connection needs to be of type SqlConnection");
+            }
+            _connection.Open();
+            _connectionString = _connection.ConnectionString;
         }
 
         public int? ConnectionTimeout { get; set; }
@@ -82,7 +91,6 @@ namespace DataOrm.DataAccess.Communication.Implementations
                 asyncResult.Parameters = Parameters;
                 asyncResult.Behaviour = behaviour;
                 asyncResult.Result = new List<T>();
-                //asyncResult.InternalAsyncResult = asyncResult.CreateCommand.BeginInvoke(query, null, commandType, Parameters, CreateCommandCallback<T>, asyncResult);
                 asyncResult.Command = CreateCommand(query, null, commandType, Parameters);
                 if (asyncResult.Command == null)
                     throw new NullReferenceException("IDbCommand is null. Now work will be done.");
@@ -111,7 +119,6 @@ namespace DataOrm.DataAccess.Communication.Implementations
             if (asyncResult.Command != null)
             {
                 asyncResult.Command.Connection.Close();
-                asyncResult.Command.Connection.Dispose();
                 asyncResult.Command.Dispose();
                 asyncResult.Command = null;
             }
@@ -657,22 +664,15 @@ namespace DataOrm.DataAccess.Communication.Implementations
                 IDbCommand dbCommand;
                 if (_connection != null)
                 {
-                    dbCommand = new SqlCommand();
-                    if (_connection.State == ConnectionState.Closed || _connection.State == ConnectionState.Broken)
+                    if (_connection.State != ConnectionState.Open)
                         _connection.Open();
-                    dbCommand.Connection = _connection;
-                }
-                else if (!string.IsNullOrWhiteSpace(_connectionString))
-                {
                     dbCommand = new SqlCommand();
-                    IDbConnection connection = new SqlConnection(_connectionString);
-                    connection.Open();
-                    dbCommand.Connection = connection;
+                    dbCommand.Connection = _connection;
                 }
                 else
                 {
                     //dbCommand = ServiceContainer.GetService<IDbCommand>();
-                    throw new Exception("Missing connection or connection string.");
+                    throw new Exception("Missing connection.");
                 }
 
                 if (option != null)
@@ -805,6 +805,41 @@ namespace DataOrm.DataAccess.Communication.Implementations
             //TableColumns.TryAdd(entityName, result);
             TableColumns[entityName] = result;
             return result;
+        }
+
+        public override void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            // Check to see if Dispose has already been called.
+            if(!_disposed)
+            {
+                // If disposing equals true, dispose all managed
+                // and unmanaged resources.
+                if(disposing)
+                {
+                    // Dispose managed resources.
+                    //component.Dispose();
+                    if (_connection != null)
+                    {
+                        _connection.Close();
+                        _connection.Dispose();
+                    }
+                }
+
+                // Note disposing has been done.
+                _disposed = true;
+
+            }
+        }
+
+        ~SqlServer()
+        {
+            Dispose(false);
         }
     }
 }
