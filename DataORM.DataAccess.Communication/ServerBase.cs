@@ -179,6 +179,11 @@ namespace DataOrm.DataAccess.Communication
                 var isAssignable = pi.PropertyType.IsAssignableFrom(oType);
                 if (isAssignable)
                     SetPropertyValue(pi, obj, value is DBNull ? null : value);
+                else
+                {
+                    var propertyValue = TryGetValue(value, pi.PropertyType);
+                    SetPropertyValue(pi, obj, propertyValue);
+                }
             }
             catch (Exception ex)
             {
@@ -225,9 +230,13 @@ namespace DataOrm.DataAccess.Communication
             {
                 value = GetValueAsBoolean(value);
             }
-            else if (propertyInfo.PropertyType == typeof (DateTime))
+            else if (propertyInfo.PropertyType == typeof(DateTime))
             {
                 value = GetValueAsDateTime(value);
+            }
+            else if (propertyInfo.PropertyType == typeof(Guid))
+            {
+                value = GetValueAsGuid(value);
             }
             propertyInfo.SetValue(obj, value, null);
         }
@@ -277,11 +286,13 @@ namespace DataOrm.DataAccess.Communication
         private static bool GetValueAsBoolean(object value)
         {
             var stringValue = value == null ? "0" : value.ToString();
-            switch (stringValue)
+            switch (stringValue.ToLower())
             {
                 case "0":
+                case "false":
                     return false;
                 case "1":
+                case "true":
                     return true;
                 default:
                     return bool.Parse(stringValue);
@@ -300,6 +311,34 @@ namespace DataOrm.DataAccess.Communication
                 return null;
 
             return tmpDate;
+        }
+
+        private Guid? GetValueAsGuid(object value)
+        {
+            Guid tmpDate;
+            if (!Guid.TryParse((value ?? "").ToString(), out tmpDate))
+                return null;
+
+            return tmpDate;
+        }
+
+        private static object TryGetValue(object value, Type outputType)
+        {
+            try
+            {
+                if (value is DBNull || value == null)
+                    return null;
+                if (outputType == typeof (string))
+                    return value.ToString();
+
+                var result = Convert.ChangeType(value, outputType);
+                return result;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+            }
+            return null;
         }
 
         protected virtual string GetFieldValue<T>(T client, PropertyInfo pi)
