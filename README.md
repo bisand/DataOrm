@@ -12,7 +12,7 @@ Database support:
  
 ###Example:
 
-    var connectionString = "Data Source=localhost;Initial Catalog=VRIntegration;Integrated Security=True;Connect Timeout=15;Encrypt=False;TrustServerCertificate=False";
+    var connectionString = "Data Source=localhost;Initial Catalog=Test;Integrated Security=True;Connect Timeout=15;Encrypt=False;TrustServerCertificate=False";
     using (var session = DataOrmServer.CreateSession(SessionType.SqlServer, connectionString))
     {
         var activities = new List<Activity>();
