@@ -15,7 +15,6 @@ Database support:
     var connectionString = "Data Source=localhost;Initial Catalog=Test;Integrated Security=True;Connect Timeout=15;Encrypt=False;TrustServerCertificate=False";
     using (var session = DataOrmServer.CreateSession(SessionType.SqlServer, connectionString))
     {
-        var activities = new List<Activity>();
         var result = session.Query<Activity>("SELECT * FROM Activities");
         Assert.IsNotNull(result);
         Assert.IsTrue(result.Count > 0);
