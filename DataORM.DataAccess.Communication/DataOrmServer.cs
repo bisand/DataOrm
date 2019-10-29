@@ -12,6 +12,7 @@ using DataOrm.DataAccess.Common.Interfaces;
 using DataOrm.DataAccess.Common.Models;
 using DataOrm.DataAccess.Common.Threading;
 using DataOrm.DataAccess.Communication.Implementations;
+using System.Collections;
 
 namespace DataOrm.DataAccess.Communication
 {
@@ -312,6 +313,109 @@ namespace DataOrm.DataAccess.Communication
             return string.IsNullOrEmpty(pi.GetValue(client, null) as string)
                 ? "null"
                 : string.Format("'{0}'", pi.GetValue(client, null).ToString().Replace("'", "''"));
+        }
+
+        /// <summary>
+        /// </summary>
+        /// <param name="option"></param>
+        /// <param name="x"></param>
+        /// <returns></returns>
+        protected static object CheckValue(LoadWithOption option, object x)
+        {
+            try
+            {
+                var propertyInfo = x.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase).FirstOrDefault(y => y.Name == option.ForeignKey);
+                var result = propertyInfo != null ? propertyInfo.GetValue(x, null) ?? "" : "";
+                return result ?? "";
+            }
+            catch (Exception ex)
+            {
+                //Logger.LogError(e);
+                Console.WriteLine(ex);
+                return "";
+            }
+        }
+
+        /// <summary>
+        /// </summary>
+        /// <param name="info"></param>
+        /// <param name="instance"></param>
+        /// <param name="values"></param>
+        /// <param name="genericArgument"></param>
+        protected static void SetValue(PropertyInfo info, object instance, IEnumerable<object> values, Type genericArgument)
+        {
+            try
+            {
+                if (instance == null)
+                    instance = Activator.CreateInstance(info.PropertyType);
+                var o = Activator.CreateInstance(info.PropertyType);
+                var methodInfo = info.PropertyType.GetMethod("Add");
+                foreach (var value in values)
+                {
+                    methodInfo.Invoke(o, new[] {value});
+                }
+                info.SetValue(instance, o, null);
+            }
+            catch (Exception ex)
+            {
+                //Logger.LogError(e);
+                Console.WriteLine(ex);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="option"></param>
+        /// <param name="targetData"></param>
+        /// <param name="data"></param>
+        protected static void PopulateData(LoadWithOption option, IEnumerable targetData, List<object> data)
+        {
+            try
+            {
+                if (data == null)
+                    return;
+                var destProp = option.DeclaringType.GetProperty(option.PropertyName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase);
+                var keyProp = option.DeclaringType.GetProperty(option.ForeignKey, BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase);
+                foreach (var o in targetData)
+                {
+                    var oType = o.GetType();
+                    var propertyPi = oType.GetProperties().FirstOrDefault(x => x.PropertyType == option.PropertyType || x.PropertyType.GetGenericArguments().Any(y => y == option.PropertyType));
+                    if (option.DeclaringType == oType && propertyPi != null)
+                    {
+                        var key = (keyProp.GetValue(o, null) ?? "").ToString();
+                        if (propertyPi.PropertyType.IsGenericType && propertyPi.PropertyType.GetGenericTypeDefinition() == typeof (List<>))
+                        {
+                            if (destProp.PropertyType.IsGenericType && destProp.PropertyType.GetGenericTypeDefinition() == typeof (List<>))
+                                SetValue(destProp, o, data.Where(x => CheckValue(option, x).ToString() == key), propertyPi.PropertyType);
+                            else
+                                destProp.SetValue(o, data.FirstOrDefault(x => CheckValue(option, x).ToString() == key), null);
+                        }
+                        else
+                            destProp.SetValue(o, data.FirstOrDefault(x => CheckValue(option, x).ToString() == key), null);
+                    }
+                    else
+                    {
+                        foreach (var prop in oType.GetProperties().Where(x => x.GetCustomAttributes(typeof (NavigationPropertyAttribute), false).Any()))
+                        {
+                            var value = prop.GetValue(o, null);
+                            if (value == null)
+                                continue;
+                            var valueList = value as IEnumerable;
+                            if (valueList == null)
+                                valueList = new List<object> {value};
+                            PopulateData(option, valueList, data);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                //Logger.LogError(e);
+                Console.WriteLine(ex);
+                throw;
+            }
         }
 
         protected virtual Type GetPropertyType(PropertyInfo pi)
