@@ -3,5 +3,6 @@
     public enum SessionType
     {
         SqlServer,
+        MySql,
     }
 }

@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
-using Microsoft.Data.SqlClient;
+using MySql.Data.MySqlClient;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -12,36 +12,37 @@ using DataOrm.DataAccess.Common.Attributes;
 using DataOrm.DataAccess.Common.Interfaces;
 using DataOrm.DataAccess.Common.Models;
 using DataOrm.DataAccess.Common.Threading;
+using System.Threading.Tasks;
 
 namespace DataOrm.DataAccess.Communication.Implementations
 {
-    public class SqlServer : DataOrmServer, IAsyncDataAccess
+    public class MySqlServer : DataOrmServer, IAsyncDataAccess
     {
         private const int MaxBatchSIze = 0x10000;
         //private static readonly ILogger Logger;
-        private readonly SqlConnection _connection;
+        private readonly MySqlConnection _connection;
         private string _connectionString;
         private bool _disposed;
 
         #region IAsyncDataAccess Members
 
-        public SqlServer()
+        public MySqlServer()
         {
         }
 
-        public SqlServer(string connectionString) : this()
+        public MySqlServer(string connectionString) : this()
         {
             _connectionString = connectionString;
-            _connection = new SqlConnection(connectionString);
+            _connection = new MySqlConnection(connectionString);
             _connection.Open();
         }
 
-        public SqlServer(SqlConnection connection) : this()
+        public MySqlServer(MySqlConnection connection) : this()
         {
             _connection = connection;
-            if (_connection == null || _connection.GetType() != typeof(SqlConnection))
+            if (_connection == null || _connection.GetType() != typeof(MySqlConnection))
             {
-                throw new ArgumentException("The connection needs to be of type SqlConnection");
+                throw new ArgumentException("The connection needs to be of type MySqlConnection");
             }
             _connection.Open();
             _connectionString = _connection.ConnectionString;
@@ -54,8 +55,6 @@ namespace DataOrm.DataAccess.Communication.Implementations
             get { return _connectionString; }
             set { _connectionString = value; }
         }
-
-        public string ConnectionString1 { get => _connectionString; set => _connectionString = value; }
 
         /// <summary>
         /// </summary>
@@ -164,7 +163,7 @@ namespace DataOrm.DataAccess.Communication.Implementations
         /// <param name="dbType"></param>
         public void AddParameter(string name, object value, DbType dbType)
         {
-            Parameters.Add(new SqlParameter(name, value));
+            Parameters.Add(new MySqlParameter(name, value));
         }
 
         /// <summary>
@@ -469,6 +468,7 @@ namespace DataOrm.DataAccess.Communication.Implementations
             if (entityName == null)
                 entityName = typeName;
             var columns = GetTableColumnsFromDatabase(entityName);
+
             foreach (var data in dataList)
             {
                 var fields = string.Empty;
@@ -507,11 +507,9 @@ namespace DataOrm.DataAccess.Communication.Implementations
                         {
                             command.ExecuteNonQuery();
                             transaction.Commit();
-                            //Logger.DebugFormat("Successfully inserted data.");
                         }
                         catch (Exception ex)
                         {
-                            //Logger.LogError(ex);
                             Console.WriteLine(ex);
                             transaction.Rollback();
                             return false;
@@ -668,7 +666,7 @@ namespace DataOrm.DataAccess.Communication.Implementations
                 {
                     if (_connection.State != ConnectionState.Open)
                         _connection.Open();
-                    dbCommand = new SqlCommand();
+                    dbCommand = new MySqlCommand();
                     dbCommand.Connection = _connection;
                 }
                 else
@@ -762,14 +760,14 @@ namespace DataOrm.DataAccess.Communication.Implementations
             }
 
             result = new List<FieldDefinition>();
-            var query = string.Format("SELECT TOP 0 * FROM {0}", Pluralize(entityName));
+            var query = string.Format("SELECT * FROM {0} LIMIT 0", Pluralize(entityName));
             if (command != null)
             {
                 command.CommandText = query;
             }
             else
             {
-                //var sqlServer = ServiceContainer.GetService<IAsyncDataAccess>();
+                //var MySql = ServiceContainer.GetService<IAsyncDataAccess>();
                 command = CreateCommand(query);
             }
             try
@@ -839,7 +837,7 @@ namespace DataOrm.DataAccess.Communication.Implementations
             }
         }
 
-        ~SqlServer()
+        ~MySqlServer()
         {
             Dispose(false);
         }

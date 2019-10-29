@@ -1,12 +1,11 @@
 ﻿using System;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 
 namespace DataOrm.Tests.Unit
 {
-    [TestClass]
     public class UnitTest1
     {
-        [TestMethod]
+        [Fact]
         public void TestMethod1()
         {
         }

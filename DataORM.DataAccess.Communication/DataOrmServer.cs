@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
-using System.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
@@ -48,6 +48,9 @@ namespace DataOrm.DataAccess.Communication
                 case SessionType.SqlServer:
                     var sqlServer = new SqlServer(connectionString);
                     return sqlServer;
+                case SessionType.MySql:
+                    var mySql = new MySqlServer(connectionString);
+                    return mySql;
             }
             throw new NotImplementedException(string.Format("The session type is not implemented {0}", sessionType));
         }
