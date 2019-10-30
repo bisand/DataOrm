@@ -13,6 +13,8 @@ using DataOrm.DataAccess.Common.Models;
 using DataOrm.DataAccess.Common.Threading;
 using DataOrm.DataAccess.Communication.Implementations;
 using System.Collections;
+using System.Linq.Expressions;
+using System.Threading;
 
 namespace DataOrm.DataAccess.Communication
 {
@@ -44,7 +46,8 @@ namespace DataOrm.DataAccess.Communication
         protected abstract int MaxBatchSIze { get; }
         protected abstract string InsertStatement { get; }
         protected abstract string UpdateStatement { get; }
-
+        protected abstract string GetQuery(LoadWithOption option, IEnumerable<string> value);
+        
         /// <summary>
         /// </summary>
         /// <typeparam name="T"></typeparam>
@@ -247,6 +250,270 @@ namespace DataOrm.DataAccess.Communication
         public abstract IDbCommand CreateCommand(string sql, LoadWithOption option = null, CommandType commandType = CommandType.Text, List<DbParameter> parameters = null);
         internal abstract IList<FieldDefinition> GetTableColumnsFromDatabase<T>();
         internal abstract IList<FieldDefinition> GetTableColumnsFromDatabase(string entityName, IDbCommand command = null);
+
+        /// <summary>
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="query"></param>
+        /// <returns></returns>
+        public List<T> Query<T>(string query) where T : new()
+        {
+            var asyncResult = BeginQuery<T>(query, null, null);
+            if (asyncResult.IsCompleted || asyncResult.AsyncWaitHandle.WaitOne(300000))
+            {
+                return EndQuery<T>(asyncResult);
+            }
+            return new List<T>();
+        }
+
+        /// <summary>
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="query"></param>
+        /// <param name="callback"></param>
+        /// <param name="state"></param>
+        /// <param name="commandType"></param>
+        /// <param name="behaviour"></param>
+        /// <returns></returns>
+        public IAsyncResult BeginQuery<T>(string query, AsyncCallback callback, object state, CommandType commandType = CommandType.Text, CommandBehavior behaviour = CommandBehavior.Default) where T : new()
+        {
+            var asyncResult = new SqlAsyncResult<T>(callback, state);
+            try
+            {
+                asyncResult.CreateCommand = CreateCommand;
+                asyncResult.ExecuteReader = ExecuteReader;
+                asyncResult.LoadWithOptions = LoadWithOptions.ToDictionary(x => x.Key, y => y.Value);
+                asyncResult.Parameters = Parameters;
+                asyncResult.Behaviour = behaviour;
+                asyncResult.Result = new List<T>();
+                asyncResult.Command = CreateCommand(query, null, commandType, Parameters);
+                if (asyncResult.Command == null)
+                    throw new NullReferenceException("IDbCommand is null. Now work will be done.");
+                asyncResult.InternalAsyncResult = asyncResult.ExecuteReader.BeginInvoke(asyncResult.Command, asyncResult.Behaviour, ExecuteReaderCallback<T>, asyncResult);
+            }
+            catch (Exception ex)
+            {
+                //Logger.LogError(e);
+                Console.WriteLine(ex);
+                asyncResult.SetCompleted();
+            }
+            return asyncResult;
+        }
+
+        /// <summary>
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="ar"></param>
+        /// <returns></returns>
+        public List<T> EndQuery<T>(IAsyncResult ar) where T : new()
+        {
+            if (!(ar is SqlAsyncResult<T>))
+                return new List<T>();
+
+            var asyncResult = (ar as SqlAsyncResult<T>);
+            if (asyncResult.Command != null)
+            {
+                asyncResult.Command.Connection.Close();
+                asyncResult.Command.Dispose();
+                asyncResult.Command = null;
+            }
+            return asyncResult.Result;
+        }
+
+        /// <summary>
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        public void LoadWith<T>(Expression<Func<T, Object>> expression)
+        {
+            var option = new LoadWithOption();
+            var member = (MemberExpression)expression.Body;
+            option.SourceType = typeof(T);
+            option.PropertyName = member.Member.Name;
+            option.PropertyType = member.Type;
+            option.DeclaringType = member.Member.DeclaringType;
+            var attribute = member.Member.GetCustomAttributes(typeof(NavigationPropertyAttribute), false).FirstOrDefault() as NavigationPropertyAttribute;
+            if (attribute == null)
+                throw new ApplicationException("The LoadWith property must be decorated with the NavigationPropertyAttribute.");
+
+            // Singularize names. They will be pluralized later when querying the database.
+            if (option.PropertyType.IsGenericType && option.PropertyType.GetGenericTypeDefinition() == typeof(List<>))
+            {
+                option.EntityName = string.IsNullOrWhiteSpace(attribute.Entity) ? Singularize(option.PropertyName) : attribute.Entity;
+                option.ForeignKey = string.IsNullOrWhiteSpace(attribute.ForeignKey) ? Singularize(option.PropertyName) + "No" : attribute.ForeignKey;
+            }
+            else
+            {
+                option.EntityName = string.IsNullOrWhiteSpace(attribute.Entity) ? option.PropertyName : attribute.Entity;
+                option.ForeignKey = string.IsNullOrWhiteSpace(attribute.ForeignKey) ? option.PropertyName + "No" : attribute.ForeignKey;
+            }
+            option.LocalKey = string.IsNullOrWhiteSpace(attribute.LocalKey) ? option.ForeignKey : attribute.LocalKey;
+            LoadWithOptions.Add(option, null);
+        }
+
+        /// <summary>
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="ar"></param>
+        protected void ExecuteReaderCallback<T>(IAsyncResult ar) where T : new()
+        {
+            if (ar == null || !(ar.AsyncState is SqlAsyncResult<T>))
+                return;
+
+            var asyncResult = (ar.AsyncState as SqlAsyncResult<T>);
+            try
+            {
+                using (var dataReader = asyncResult.ExecuteReader.EndInvoke(asyncResult.InternalAsyncResult))
+                {
+                    if (dataReader == null)
+                    {
+                        asyncResult.SetCompleted();
+                        if (asyncResult.MainAsyncResult != null)
+                            asyncResult.MainAsyncResult.SetCompleted();
+                        return;
+                    }
+                    if (asyncResult.MainAsyncResult == null)
+                    {
+                        asyncResult.Result = ReadData<T>(dataReader);
+                        if (asyncResult.Result == null || !asyncResult.Result.Any())
+                        {
+                            asyncResult.SetCompleted();
+                            if (asyncResult.MainAsyncResult != null)
+                                asyncResult.MainAsyncResult.SetCompleted();
+                            return;
+                        }
+                        if (asyncResult.LoadWithOptions != null && asyncResult.LoadWithOptions.Any())
+                            FetchLoadWithData(asyncResult, typeof (T), asyncResult.Result.Cast<object>().ToList());
+                        else
+                        {
+                            asyncResult.SetCompleted();
+                            if (asyncResult.MainAsyncResult != null)
+                                asyncResult.MainAsyncResult.SetCompleted();
+                        }
+                    }
+                    else
+                    {
+                        {
+                            var option = asyncResult.MainAsyncResult.LoadWithOptions.Keys.FirstOrDefault(x => x.PropertyName == asyncResult.PropertyName);
+                            if (option != null)
+                            {
+                                var type = option.PropertyType;
+                                if (option.PropertyType.IsGenericType && option.PropertyType.GetGenericArguments().Any())
+                                    type = option.PropertyType.GetGenericArguments().FirstOrDefault();
+                                var data = ReadData(type, dataReader);
+                                asyncResult.MainAsyncResult.LoadWithOptions[option] = data;
+                                FetchLoadWithData(asyncResult.MainAsyncResult, type, data);
+                            }
+
+                            Interlocked.Decrement(ref asyncResult.MainAsyncResult.WorkCounter);
+                            if (asyncResult.MainAsyncResult.WorkCounter <= 0)
+                            {
+                                foreach (var o in asyncResult.MainAsyncResult.LoadWithOptions.ToList())
+                                    if (o.Key != null && o.Value != null)
+                                        PopulateData(o.Key, asyncResult.MainAsyncResult.Result, o.Value);
+
+                                asyncResult.SetCompleted();
+                                if (asyncResult.MainAsyncResult != null)
+                                    asyncResult.MainAsyncResult.SetCompleted();
+                            }
+
+                            asyncResult.Command.Connection.Close();
+                            asyncResult.Command.Dispose();
+                            asyncResult.Command = null;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                //Logger.LogError(ex);
+                asyncResult.Exception = ex;
+                asyncResult.SetCompleted();
+                if (asyncResult.MainAsyncResult != null)
+                    asyncResult.MainAsyncResult.SetCompleted();
+            }
+        }
+
+        /// <summary>
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="mainAsyncResult"></param>
+        /// <param name="declaringType"></param>
+        /// <param name="dataList"></param>
+        protected void FetchLoadWithData<T>(SqlAsyncResult<T> mainAsyncResult, Type declaringType, List<object> dataList) where T : new()
+        {
+            try
+            {
+                var options = mainAsyncResult.LoadWithOptions.Keys.Where(x => x.DeclaringType == declaringType).ToList();
+                foreach (var option in options.Where(option => option.RecursionLevel < 1))
+                {
+                    Interlocked.Increment(ref option.RecursionLevel);
+                    Interlocked.Increment(ref mainAsyncResult.WorkCounter);
+
+                    var stateObject = new SqlAsyncResult<T>(null, null);
+                    stateObject.CreateCommand = CreateCommand;
+                    stateObject.ExecuteReader = ExecuteReader;
+                    stateObject.MainAsyncResult = mainAsyncResult;
+                    stateObject.PropertyName = option.PropertyName;
+
+                    var localKey = option.LocalKey.ToLower();
+                    var values = new List<string>();
+                    var type = option.DeclaringType;
+                    var typeName = type.Name.ToLower();
+                    Dictionary<string, PropertyInfo> dataProperties;
+                    if ((dataProperties = GetReflections(typeName)) == null)
+                    {
+                        var propertyInfos = type.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase);
+                        dataProperties = propertyInfos.ToDictionary(x => x.Name, y => y);
+                        ReflectedProperties.TryAdd(typeName, dataProperties);
+                    }
+                    foreach (var data in dataList)
+                    {
+                        PropertyInfo pi;
+                        if (dataProperties.TryGetValue(localKey, out pi))
+                        {
+                            var o = pi.GetValue(data, null);
+                            var value = (o ?? "").ToString();
+                            values.Add(value);
+                        }
+                    }
+                    values = values.Distinct().ToList();
+                    var query = GetQuery(option, values);
+                    var commandType = CommandType.Text;
+                    //stateObject.InternalAsyncResult = stateObject.CreateCommand.BeginInvoke(query, option, commandType, null, CreateCommandCallback<T>, stateObject);
+                    stateObject.Command = CreateCommand(query, option, commandType);
+                    if (stateObject.Command == null)
+                        throw new NullReferenceException("IDbCommand is null. Now work will be done.");
+                    stateObject.InternalAsyncResult = stateObject.ExecuteReader.BeginInvoke(stateObject.Command, stateObject.Behaviour, ExecuteReaderCallback<T>, stateObject);
+                }
+            }
+            catch (Exception ex)
+            {
+                //Logger.LogError(e);
+                Console.WriteLine(ex);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// </summary>
+        /// <param name="command"></param>
+        /// <param name="behavior"></param>
+        /// <returns></returns>
+        protected static IDataReader ExecuteReader(IDbCommand command, CommandBehavior behavior)
+        {
+            try
+            {
+                var reader = command.ExecuteReader(behavior);
+                return reader;
+            }
+            catch (Exception ex)
+            {
+                //Logger.LogError(ex);
+                Console.WriteLine(ex);
+                throw;
+            }
+        }
 
         public static IDataAccess CreateSession(SessionType sessionType, string connectionString)
         {
