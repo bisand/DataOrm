@@ -1,3 +1,7 @@
+CREATE DATABASE test
+	CHARACTER SET utf8mb4
+	COLLATE utf8mb4_0900_ai_ci;
+
 CREATE TABLE test.entitynormalizedvalues (
   EntityNormalizedValueId BIGINT(20) NOT NULL AUTO_INCREMENT,
   TransactionId BIGINT(20) NOT NULL,
@@ -37,7 +41,7 @@ CREATE TABLE test.entitynormalizedvalues (
   PRIMARY KEY (EntityNormalizedValueId)
 )
 ENGINE = INNODB,
-AUTO_INCREMENT = 13273863,
+AUTO_INCREMENT = 0,
 AVG_ROW_LENGTH = 184,
 CHARACTER SET utf8,
 COLLATE utf8_general_ci;

@@ -31,7 +31,7 @@ namespace DataOrm.Test
 
         static void TestMySql(int rows)
         {
-            var connectionString = "user=root;password=SuperStrongPassword!;server=localhost;database=test;Character Set=utf8";
+            var connectionString = "user=test;password=SuperStrongPassword!;server=localhost;database=test;Character Set=utf8";
             using (var session = DataOrmServer.CreateSession(SessionType.MySql, connectionString))
             {
                 var list = new List<EntityNormalizedValue>();
