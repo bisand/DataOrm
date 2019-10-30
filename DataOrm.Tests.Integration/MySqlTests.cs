@@ -14,7 +14,7 @@ namespace DataOrm.Tests.Integration
         [Fact]
         public void Fact1()
         {
-            var mySql = new MySqlServer("user=root;password=SuperStrongPassword!;server=localhost;database=crdb_test;Character Set=utf8");
+            var mySql = new MySqlServer("user=root;password=SuperStrongPassword!;server=localhost;database=test;Character Set=utf8");
             var result = mySql.Query<JobConfiguration>("SELECT * FROM vw_JobConfigurations");
             Assert.True(result != null);
         }
@@ -22,7 +22,7 @@ namespace DataOrm.Tests.Integration
         [Fact]
         public void PerformaceTest()
         {
-            var connectionString = "user=root;password=SuperStrongPassword!;server=localhost;database=crdb_test;Character Set=utf8";
+            var connectionString = "user=root;password=SuperStrongPassword!;server=localhost;database=test;Character Set=utf8";
             using (var session = DataOrmServer.CreateSession(SessionType.MySql, connectionString))
             {
                 var activities = new List<DataOrm.Tests.Integration.Models.Activity>();
@@ -54,7 +54,7 @@ namespace DataOrm.Tests.Integration
         [Fact]
         public void SimpleExampleTest()
         {
-            var connectionString = "user=root;password=SuperStrongPassword!;server=localhost;database=crdb_test;Character Set=utf8";
+            var connectionString = "user=root;password=SuperStrongPassword!;server=localhost;database=test;Character Set=utf8";
             using (var session = DataOrmServer.CreateSession(SessionType.MySql, connectionString))
             {
                 var list = new List<EntityNormalizedValue>();

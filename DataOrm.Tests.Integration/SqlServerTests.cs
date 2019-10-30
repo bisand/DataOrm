@@ -13,7 +13,7 @@ namespace DataOrm.Tests.Integration
         [Fact]
         public void Fact1()
         {
-            var sqlServer = new SqlServer("Data Source=localhost;Initial Catalog=VRIntegration;Integrated Security=True;Connect Timeout=15;Encrypt=False;TrustServerCertificate=False");
+            var sqlServer = new MicrosoftSqlServer("Data Source=localhost;Initial Catalog=VRIntegration;Integrated Security=True;Connect Timeout=15;Encrypt=False;TrustServerCertificate=False");
             var result = sqlServer.Query<JobConfiguration>("SELECT * FROM vw_JobConfigurations");
             Assert.True(result != null);
         }

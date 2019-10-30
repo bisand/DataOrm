@@ -30,7 +30,7 @@ namespace DataOrm.DataAccess.Communication
 
         protected DataOrmServer()
         {
-            DateTimeFormats = new[] {"yyyyMMdd", "yyyy-MM-dd", "dd.MM.yyyy", "yyyyMMddHHmmss", "yyyy-MM-dd HH:mm:ss", "dd.MM.yyyy HH:mm:ss"};
+            DateTimeFormats = new[] { "yyyyMMdd", "yyyy-MM-dd", "dd.MM.yyyy", "yyyyMMddHHmmss", "yyyy-MM-dd HH:mm:ss", "dd.MM.yyyy HH:mm:ss" };
             Parameters = new List<DbParameter>();
             LoadWithOptions = new Dictionary<LoadWithOption, List<object>>();
         }
@@ -41,13 +41,219 @@ namespace DataOrm.DataAccess.Communication
         public string[] DateTimeFormats { get; set; }
 
         public List<DbParameter> Parameters { get; set; }
+        protected abstract int MaxBatchSIze { get; }
+        protected abstract string InsertStatement { get; }
+        protected abstract string UpdateStatement { get; }
+
+        /// <summary>
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="dataList"></param>
+        /// <param name="entityName">
+        ///     Use this attribute if there is a descrepancy between the type name (T) and database table
+        ///     name. Name must be in singular format.
+        /// </param>
+        /// <returns></returns>
+        public bool InsertData<T>(List<T> dataList, string entityName = null) where T : new()
+        {
+            var sql = string.Empty;
+            var tType = typeof(T);
+            var typeName = tType.Name.ToLower();
+            if (entityName == null)
+                entityName = typeName;
+            var columns = GetTableColumnsFromDatabase(entityName);
+
+            foreach (var data in dataList)
+            {
+                var fields = string.Empty;
+                var values = string.Empty;
+                Dictionary<string, PropertyInfo> dataProperties;
+                if ((dataProperties = GetReflections(entityName)) == null)
+                {
+                    var propertyInfos = tType.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase);
+                    dataProperties = propertyInfos.ToDictionary(x => x.Name, y => y);
+                    ReflectedProperties.TryAdd(entityName, dataProperties);
+                }
+                foreach (var pi in dataProperties)
+                {
+                    string tmpVal;
+                    FieldDefinition fd;
+                    if (string.IsNullOrWhiteSpace(tmpVal = GetFieldValue(data, pi.Value)) || (fd = columns.FirstOrDefault(x => String.Equals(x.ColumnName, pi.Value.Name, StringComparison.CurrentCultureIgnoreCase))) == null)
+                        continue;
+                    if (fd.IsAutoIncrement)
+                        continue;
+                    fields += pi.Value.Name + ",";
+                    if (fd.DataType == typeof(string) && tmpVal.Length > fd.ColumnSize)
+                        values += tmpVal.Substring(0, fd.ColumnSize - 1) + "',";
+                    else if (fd.DataType == typeof(decimal) || fd.DataType == typeof(float) || fd.DataType == typeof(double))
+                        values += tmpVal.Replace(",", ".") + ",";
+                    else
+                        values += tmpVal + ",";
+                }
+                var tmpSql = string.Format(InsertStatement, Pluralize(entityName), fields.TrimEnd(','), values.TrimEnd(','), Environment.NewLine);
+                if (sql.Length + tmpSql.Length > MaxBatchSIze)
+                {
+                    using (var command = CreateCommand(sql))
+                    {
+                        var transaction = command.Connection.BeginTransaction();
+                        command.Transaction = transaction;
+                        try
+                        {
+                            command.ExecuteNonQuery();
+                            transaction.Commit();
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine(ex);
+                            transaction.Rollback();
+                            return false;
+                        }
+                    }
+                    sql = tmpSql;
+                }
+                else
+                {
+                    sql += tmpSql;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(sql))
+            {
+                using (var command = CreateCommand(sql))
+                {
+                    var transaction = command.Connection.BeginTransaction();
+                    command.Transaction = transaction;
+                    try
+                    {
+                        command.ExecuteNonQuery();
+                        transaction.Commit();
+                        //Logger.DebugFormat("Successfully Inserted data.");
+                    }
+                    catch (Exception ex)
+                    {
+                        //Logger.LogError(ex);
+                        Console.WriteLine(ex);
+                        transaction.Rollback();
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="dataList"></param>
+        /// <param name="entityName">
+        ///     Use this attribute if there is a descrepancy between the type name (T) and database table
+        ///     name. Name must be in singular format.
+        /// </param>
+        /// <returns></returns>
+        public bool UpdateData<T>(List<T> dataList, string entityName = null)
+        {
+            //Logger.DebugFormat("Updating data of type {0}", typeof (T));
+            var sql = string.Empty;
+            var tType = typeof(T);
+            var typeName = tType.Name.ToLower();
+            if (string.IsNullOrWhiteSpace(entityName))
+                entityName = typeName;
+            var columns = GetTableColumnsFromDatabase(entityName);
+            foreach (var data in dataList)
+            {
+                var setters = string.Empty;
+                var keyVal = string.Empty;
+                Dictionary<string, PropertyInfo> dataProperties;
+                if ((dataProperties = GetReflections(entityName)) == null)
+                {
+                    var propertyInfos = tType.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase);
+                    dataProperties = propertyInfos.ToDictionary(x => x.Name, y => y);
+                    ReflectedProperties.TryAdd(entityName, dataProperties);
+                }
+                foreach (var pi in dataProperties)
+                {
+                    string tmpVal;
+                    FieldDefinition fd;
+                    if (!string.IsNullOrWhiteSpace(tmpVal = GetFieldValue(data, pi.Value)) && (fd = columns.FirstOrDefault(x => String.Equals(x.ColumnName, pi.Value.Name, StringComparison.CurrentCultureIgnoreCase))) != null)
+                    {
+                        if (!fd.IsAutoIncrement)
+                        {
+                            setters += pi.Value.Name + "=";
+                            if (fd.DataType == typeof(string) && tmpVal.Length > fd.ColumnSize)
+                                setters += tmpVal.Substring(0, fd.ColumnSize - 1) + "',";
+                            else if (fd.DataType == typeof(decimal) || fd.DataType == typeof(float) || fd.DataType == typeof(double))
+                                setters += tmpVal.Replace(",", ".") + ",";
+                            else
+                                setters += tmpVal + ",";
+                        }
+                        if (fd.IsKey)
+                        {
+                            keyVal += pi.Value.Name + "=" + tmpVal + " AND";
+                        }
+                    }
+                }
+                var tmpSql = string.Format(UpdateStatement, Pluralize(entityName), setters.TrimEnd(','), keyVal.Remove(keyVal.LastIndexOf(" AND")), Environment.NewLine);
+                if (sql.Length + tmpSql.Length > MaxBatchSIze)
+                {
+                    using (var command = CreateCommand(sql))
+                    {
+                        var transaction = command.Connection.BeginTransaction();
+                        command.Transaction = transaction;
+                        try
+                        {
+                            command.ExecuteNonQuery();
+                            transaction.Commit();
+                            //Logger.DebugFormat("Successfully updated data.");
+                        }
+                        catch (Exception ex)
+                        {
+                            //Logger.LogError(ex);
+                            Console.WriteLine(ex);
+                            transaction.Rollback();
+                            return false;
+                        }
+                    }
+                    sql = tmpSql;
+                }
+                else
+                {
+                    sql += tmpSql;
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(sql))
+            {
+                using (var command = CreateCommand(sql))
+                {
+                    var transaction = command.Connection.BeginTransaction();
+                    command.Transaction = transaction;
+                    try
+                    {
+                        command.ExecuteNonQuery();
+                        transaction.Commit();
+                        //Logger.DebugFormat("Successfully updated data.");
+                    }
+                    catch (Exception ex)
+                    {
+                        //Logger.LogError(ex);
+                        Console.WriteLine(ex);
+                        transaction.Rollback();
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        public abstract IDbCommand CreateCommand(string sql, LoadWithOption option = null, CommandType commandType = CommandType.Text, List<DbParameter> parameters = null);
+        internal abstract IList<FieldDefinition> GetTableColumnsFromDatabase<T>();
+        internal abstract IList<FieldDefinition> GetTableColumnsFromDatabase(string entityName, IDbCommand command = null);
 
         public static IDataAccess CreateSession(SessionType sessionType, string connectionString)
         {
             switch (sessionType)
             {
                 case SessionType.SqlServer:
-                    var sqlServer = new SqlServer(connectionString);
+                    var sqlServer = new MicrosoftSqlServer(connectionString);
                     return sqlServer;
                 case SessionType.MySql:
                     var mySql = new MySqlServer(connectionString);
@@ -61,7 +267,7 @@ namespace DataOrm.DataAccess.Communication
             switch (sessionType)
             {
                 case SessionType.SqlServer:
-                    var sqlServer = new SqlServer(connection as SqlConnection);
+                    var sqlServer = new MicrosoftSqlServer(connection as SqlConnection);
                     return sqlServer;
             }
             throw new NotImplementedException(string.Format("The session type is not implemented {0}", sessionType));
@@ -75,7 +281,7 @@ namespace DataOrm.DataAccess.Communication
             {
                 if (reader != null)
                 {
-                    var type = typeof (T);
+                    var type = typeof(T);
                     var typeName = type.Name.ToLower();
                     var dataProperties = GetDataProperties(type);
                     if (dataProperties == null)
@@ -146,9 +352,9 @@ namespace DataOrm.DataAccess.Communication
             var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
             foreach (var pi in properties)
             {
-                if (pi.GetCustomAttributes(typeof (NavigationPropertyAttribute), false).Any())
+                if (pi.GetCustomAttributes(typeof(NavigationPropertyAttribute), false).Any())
                     continue;
-                var attribute = pi.GetCustomAttributes(typeof (DatabaseFieldAttribute), false).Cast<DatabaseFieldAttribute>().FirstOrDefault();
+                var attribute = pi.GetCustomAttributes(typeof(DatabaseFieldAttribute), false).Cast<DatabaseFieldAttribute>().FirstOrDefault();
                 if (attribute != null && !string.IsNullOrWhiteSpace(attribute.FieldName))
                 {
                     var fieldName = attribute.FieldName.ToLower();
@@ -233,9 +439,9 @@ namespace DataOrm.DataAccess.Communication
             {
                 if (value is DBNull || value == null)
                     return null;
-                if (outputType == typeof (string))
+                if (outputType == typeof(string))
                     return value.ToString();
-                if (outputType == typeof (Guid))
+                if (outputType == typeof(Guid))
                     return Guid.Parse(value.ToString());
 
                 var result = Convert.ChangeType(value, outputType);
@@ -254,58 +460,58 @@ namespace DataOrm.DataAccess.Communication
             if (IsNullable(pi) && value == null)
                 return "null";
 
-            if (GetPropertyType(pi) == typeof (DateTime))
+            if (GetPropertyType(pi) == typeof(DateTime))
             {
                 if (!IsNullable(pi) && value is DateTime &&
-                    (value is DateTime ? (DateTime) value : new DateTime()) == DateTime.MinValue)
+                    (value is DateTime ? (DateTime)value : new DateTime()) == DateTime.MinValue)
                     return "cast(0 as datetime)";
 
                 return string.Format("'{0:yyyy-MM-dd HH:mm:ss}'", value);
             }
 
-            if (GetPropertyType(pi) == typeof (bool))
+            if (GetPropertyType(pi) == typeof(bool))
             {
-                return ((value is bool && (bool) value)) ? "1" : "0";
+                return ((value is bool && (bool)value)) ? "1" : "0";
             }
 
-            if (GetPropertyType(pi) == typeof (int))
+            if (GetPropertyType(pi) == typeof(int))
             {
-                return ((value is int ? (int) value : 0)).ToString(CultureInfo.InvariantCulture);
+                return ((value is int ? (int)value : 0)).ToString(CultureInfo.InvariantCulture);
             }
 
-            if (GetPropertyType(pi) == typeof (short))
+            if (GetPropertyType(pi) == typeof(short))
             {
-                return ((value is short ? (short) value : 0)).ToString(CultureInfo.InvariantCulture);
+                return ((value is short ? (short)value : 0)).ToString(CultureInfo.InvariantCulture);
             }
 
-            if (GetPropertyType(pi) == typeof (long))
+            if (GetPropertyType(pi) == typeof(long))
             {
-                return ((value is long ? (long) value : 0)).ToString(CultureInfo.InvariantCulture);
+                return ((value is long ? (long)value : 0)).ToString(CultureInfo.InvariantCulture);
             }
 
-            if (GetPropertyType(pi) == typeof (byte))
+            if (GetPropertyType(pi) == typeof(byte))
             {
-                return ((value is byte ? (byte) value : 0)).ToString(CultureInfo.InvariantCulture);
+                return ((value is byte ? (byte)value : 0)).ToString(CultureInfo.InvariantCulture);
             }
 
-            if (GetPropertyType(pi) == typeof (decimal))
+            if (GetPropertyType(pi) == typeof(decimal))
             {
-                return ((value is decimal ? (decimal) value : 0)).ToString(CultureInfo.InvariantCulture);
+                return ((value is decimal ? (decimal)value : 0)).ToString(CultureInfo.InvariantCulture);
             }
 
-            if (GetPropertyType(pi) == typeof (float))
+            if (GetPropertyType(pi) == typeof(float))
             {
-                return ((value is float ? (float) value : 0)).ToString(CultureInfo.InvariantCulture);
+                return ((value is float ? (float)value : 0)).ToString(CultureInfo.InvariantCulture);
             }
 
-            if (GetPropertyType(pi) == typeof (double))
+            if (GetPropertyType(pi) == typeof(double))
             {
-                return ((value is double ? (double) value : 0)).ToString(CultureInfo.InvariantCulture);
+                return ((value is double ? (double)value : 0)).ToString(CultureInfo.InvariantCulture);
             }
 
-            if (GetPropertyType(pi) == typeof (Guid))
+            if (GetPropertyType(pi) == typeof(Guid))
             {
-                if (!IsNullable(pi) && value is Guid && (value is Guid ? (Guid) value : new Guid()) == Guid.Empty)
+                if (!IsNullable(pi) && value is Guid && (value is Guid ? (Guid)value : new Guid()) == Guid.Empty)
                     return string.Format("'{0}'", Guid.Empty);
                 return string.Format("'{0}'", value);
             }
@@ -352,7 +558,7 @@ namespace DataOrm.DataAccess.Communication
                 var methodInfo = info.PropertyType.GetMethod("Add");
                 foreach (var value in values)
                 {
-                    methodInfo.Invoke(o, new[] {value});
+                    methodInfo.Invoke(o, new[] { value });
                 }
                 info.SetValue(instance, o, null);
             }
@@ -385,9 +591,9 @@ namespace DataOrm.DataAccess.Communication
                     if (option.DeclaringType == oType && propertyPi != null)
                     {
                         var key = (keyProp.GetValue(o, null) ?? "").ToString();
-                        if (propertyPi.PropertyType.IsGenericType && propertyPi.PropertyType.GetGenericTypeDefinition() == typeof (List<>))
+                        if (propertyPi.PropertyType.IsGenericType && propertyPi.PropertyType.GetGenericTypeDefinition() == typeof(List<>))
                         {
-                            if (destProp.PropertyType.IsGenericType && destProp.PropertyType.GetGenericTypeDefinition() == typeof (List<>))
+                            if (destProp.PropertyType.IsGenericType && destProp.PropertyType.GetGenericTypeDefinition() == typeof(List<>))
                                 SetValue(destProp, o, data.Where(x => CheckValue(option, x).ToString() == key), propertyPi.PropertyType);
                             else
                                 destProp.SetValue(o, data.FirstOrDefault(x => CheckValue(option, x).ToString() == key), null);
@@ -397,14 +603,14 @@ namespace DataOrm.DataAccess.Communication
                     }
                     else
                     {
-                        foreach (var prop in oType.GetProperties().Where(x => x.GetCustomAttributes(typeof (NavigationPropertyAttribute), false).Any()))
+                        foreach (var prop in oType.GetProperties().Where(x => x.GetCustomAttributes(typeof(NavigationPropertyAttribute), false).Any()))
                         {
                             var value = prop.GetValue(o, null);
                             if (value == null)
                                 continue;
                             var valueList = value as IEnumerable;
                             if (valueList == null)
-                                valueList = new List<object> {value};
+                                valueList = new List<object> { value };
                             PopulateData(option, valueList, data);
                         }
                     }
@@ -425,7 +631,7 @@ namespace DataOrm.DataAccess.Communication
 
         protected virtual bool IsNullable(PropertyInfo pi)
         {
-            return pi.PropertyType.IsGenericType && pi.PropertyType.GetGenericTypeDefinition() == typeof (Nullable<>);
+            return pi.PropertyType.IsGenericType && pi.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>);
         }
 
         protected static string Pluralize(Type type)

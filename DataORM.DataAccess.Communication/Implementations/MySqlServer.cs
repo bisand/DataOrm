@@ -18,13 +18,9 @@ namespace DataOrm.DataAccess.Communication.Implementations
 {
     public class MySqlServer : DataOrmServer, IAsyncDataAccess
     {
-        private int MaxBatchSIze = 0x10000;
-        //private static readonly ILogger Logger;
         private readonly MySqlConnection _connection;
         private string _connectionString;
         private bool _disposed;
-
-        #region IAsyncDataAccess Members
 
         public MySqlServer()
         {
@@ -56,6 +52,10 @@ namespace DataOrm.DataAccess.Communication.Implementations
             set { _connectionString = value; }
         }
 
+        protected override int MaxBatchSIze { get => 0x10000; }
+        protected override string InsertStatement { get => "INSERT INTO {0} ({1}) VALUES ({2});{3}"; }
+        protected override string UpdateStatement { get => "UPDATE {0} SET {1} WHERE {2};{3}"; }
+ 
         /// <summary>
         /// </summary>
         /// <typeparam name="T"></typeparam>
@@ -274,7 +274,7 @@ namespace DataOrm.DataAccess.Communication.Implementations
                     var localKey = option.LocalKey.ToLower();
                     var values = new List<string>();
                     var type = option.DeclaringType;
-                    var typeName = type.Name;
+                    var typeName = type.Name.ToLower();
                     Dictionary<string, PropertyInfo> dataProperties;
                     if ((dataProperties = GetReflections(typeName)) == null)
                     {
@@ -346,207 +346,6 @@ namespace DataOrm.DataAccess.Communication.Implementations
             return result;
         }
 
-        #endregion
-
-        /// <summary>
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="dataList"></param>
-        /// <param name="entityName">
-        ///     Use this attribute if there is a descrepancy between the type name (T) and database table
-        ///     name. Name must be in singular format.
-        /// </param>
-        /// <returns></returns>
-        public bool InsertData<T>(List<T> dataList, string entityName = null) where T : new()
-        {
-            var sql = string.Empty;
-            var tType = typeof (T);
-            var typeName = tType.Name.ToLower();
-            if (entityName == null)
-                entityName = typeName;
-            var columns = GetTableColumnsFromDatabase(entityName);
-
-            foreach (var data in dataList)
-            {
-                var fields = string.Empty;
-                var values = string.Empty;
-                Dictionary<string, PropertyInfo> dataProperties;
-                if ((dataProperties = GetReflections(entityName)) == null)
-                {
-                    var propertyInfos = tType.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase);
-                    dataProperties = propertyInfos.ToDictionary(x => x.Name, y => y);
-                    ReflectedProperties.TryAdd(entityName, dataProperties);
-                }
-                foreach (var pi in dataProperties)
-                {
-                    string tmpVal;
-                    FieldDefinition fd;
-                    if (string.IsNullOrWhiteSpace(tmpVal = GetFieldValue(data, pi.Value)) || (fd = columns.FirstOrDefault(x => String.Equals(x.ColumnName, pi.Value.Name, StringComparison.CurrentCultureIgnoreCase))) == null)
-                        continue;
-                    if (fd.IsAutoIncrement)
-                        continue;
-                    fields += pi.Value.Name + ",";
-                    if (fd.DataType == typeof (string) && tmpVal.Length > fd.ColumnSize)
-                        values += tmpVal.Substring(0, fd.ColumnSize - 1) + "',";
-                    else if (fd.DataType == typeof (decimal) || fd.DataType == typeof (float) || fd.DataType == typeof (double))
-                        values += tmpVal.Replace(",", ".") + ",";
-                    else
-                        values += tmpVal + ",";
-                }
-                var tmpSql = string.Format("INSERT INTO {0} ({1}) VALUES ({2});{3}", Pluralize(entityName), fields.TrimEnd(','), values.TrimEnd(','), Environment.NewLine);
-                if (sql.Length + tmpSql.Length > MaxBatchSIze)
-                {
-                    using (var command = CreateCommand(sql))
-                    {
-                        var transaction = command.Connection.BeginTransaction();
-                        command.Transaction = transaction;
-                        try
-                        {
-                            command.ExecuteNonQuery();
-                            transaction.Commit();
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine(ex);
-                            transaction.Rollback();
-                            return false;
-                        }
-                    }
-                    sql = tmpSql;
-                }
-                else
-                {
-                    sql += tmpSql;
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(sql))
-            {
-                using (var command = CreateCommand(sql))
-                {
-                    var transaction = command.Connection.BeginTransaction();
-                    command.Transaction = transaction;
-                    try
-                    {
-                        command.ExecuteNonQuery();
-                        transaction.Commit();
-                        //Logger.DebugFormat("Successfully Inserted data.");
-                    }
-                    catch (Exception ex)
-                    {
-                        //Logger.LogError(ex);
-                        Console.WriteLine(ex);
-                        transaction.Rollback();
-                        return false;
-                    }
-                }
-            }
-            return true;
-        }
-
-        /// <summary>
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="dataList"></param>
-        /// <param name="entityName">
-        ///     Use this attribute if there is a descrepancy between the type name (T) and database table
-        ///     name. Name must be in singular format.
-        /// </param>
-        /// <returns></returns>
-        public bool UpdateData<T>(List<T> dataList, string entityName = null)
-        {
-            //Logger.DebugFormat("Updating data of type {0}", typeof (T));
-            var sql = string.Empty;
-            var tType = typeof (T);
-            var typeName = tType.Name;
-            if (entityName == null)
-                entityName = typeName;
-            var columns = GetTableColumnsFromDatabase(entityName);
-            foreach (var data in dataList)
-            {
-                var setters = string.Empty;
-                var keyVal = string.Empty;
-                Dictionary<string, PropertyInfo> dataProperties;
-                if ((dataProperties = GetReflections(entityName)) == null)
-                {
-                    var propertyInfos = tType.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase);
-                    dataProperties = propertyInfos.ToDictionary(x => x.Name, y => y);
-                    ReflectedProperties.TryAdd(entityName, dataProperties);
-                }
-                foreach (var pi in dataProperties)
-                {
-                    string tmpVal;
-                    FieldDefinition fd;
-                    if (!string.IsNullOrWhiteSpace(tmpVal = GetFieldValue(data, pi.Value)) && (fd = columns.FirstOrDefault(x => String.Equals(x.ColumnName, pi.Value.Name, StringComparison.CurrentCultureIgnoreCase))) != null)
-                    {
-                        if (!fd.IsAutoIncrement)
-                        {
-                            setters += pi.Value.Name + "=";
-                            if (fd.DataType == typeof (string) && tmpVal.Length > fd.ColumnSize)
-                                setters += tmpVal.Substring(0, fd.ColumnSize - 1) + "',";
-                            else if (fd.DataType == typeof (decimal) || fd.DataType == typeof (float) || fd.DataType == typeof (double))
-                                setters += tmpVal.Replace(",", ".") + ",";
-                            else
-                                setters += tmpVal + ",";
-                        }
-                        if (fd.IsKey)
-                        {
-                            keyVal += pi.Value.Name + "=" + tmpVal + " AND";
-                        }
-                    }
-                }
-                var tmpSql = string.Format("UPDATE {0} SET {1} WHERE {2};{3}", Pluralize(entityName), setters.TrimEnd(','), keyVal.Remove(keyVal.LastIndexOf(" AND")), Environment.NewLine);
-                if (sql.Length + tmpSql.Length > MaxBatchSIze)
-                {
-                    using (var command = CreateCommand(sql))
-                    {
-                        var transaction = command.Connection.BeginTransaction();
-                        command.Transaction = transaction;
-                        try
-                        {
-                            command.ExecuteNonQuery();
-                            transaction.Commit();
-                            //Logger.DebugFormat("Successfully updated data.");
-                        }
-                        catch (Exception ex)
-                        {
-                            //Logger.LogError(ex);
-                            Console.WriteLine(ex);
-                            transaction.Rollback();
-                            return false;
-                        }
-                    }
-                    sql = tmpSql;
-                }
-                else
-                {
-                    sql += tmpSql;
-                }
-            }
-            if (!string.IsNullOrWhiteSpace(sql))
-            {
-                using (var command = CreateCommand(sql))
-                {
-                    var transaction = command.Connection.BeginTransaction();
-                    command.Transaction = transaction;
-                    try
-                    {
-                        command.ExecuteNonQuery();
-                        transaction.Commit();
-                        //Logger.DebugFormat("Successfully updated data.");
-                    }
-                    catch (Exception ex)
-                    {
-                        //Logger.LogError(ex);
-                        Console.WriteLine(ex);
-                        transaction.Rollback();
-                        return false;
-                    }
-                }
-            }
-            return true;
-        }
-
         /// <summary>
         /// </summary>
         /// <param name="sql"></param>
@@ -554,7 +353,7 @@ namespace DataOrm.DataAccess.Communication.Implementations
         /// <param name="commandType"></param>
         /// <param name="parameters"></param>
         /// <returns></returns>
-        public IDbCommand CreateCommand(string sql, LoadWithOption option = null, CommandType commandType = CommandType.Text, List<DbParameter> parameters = null)
+        public override IDbCommand CreateCommand(string sql, LoadWithOption option = null, CommandType commandType = CommandType.Text, List<DbParameter> parameters = null)
         {
             try
             {
@@ -638,7 +437,7 @@ namespace DataOrm.DataAccess.Communication.Implementations
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <returns></returns>
-        private IList<FieldDefinition> GetTableColumnsFromDatabase<T>()
+        internal override IList<FieldDefinition> GetTableColumnsFromDatabase<T>()
         {
             var tType = typeof (T);
             return GetTableColumnsFromDatabase(tType.Name);
@@ -647,7 +446,7 @@ namespace DataOrm.DataAccess.Communication.Implementations
         /// <summary>
         /// </summary>
         /// <returns></returns>
-        private IList<FieldDefinition> GetTableColumnsFromDatabase(string entityName, IDbCommand command = null)
+        internal override IList<FieldDefinition> GetTableColumnsFromDatabase(string entityName, IDbCommand command = null)
         {
             List<FieldDefinition> result;
             if (TableColumns.TryGetValue(entityName, out result))
